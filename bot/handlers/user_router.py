@@ -75,23 +75,41 @@ def format_info(info, url):
     return info[url]
 
 async def get_info(url):
-        r = requests.get(f'https://www.reg.ru/whois/?dname={url}')
-        soup = BS(r.content, 'html.parser')
-        isreg = soup.find('p', class_='b-whois-domain-status__result')
-        wrapper = soup.find('div', class_='p-whois__table-wrapper')
-        ds_body = soup.find('div', class_='ds-table__body')
-        info = {}
-        if wrapper and isreg.text != 'свободен':
-            info[url] = {}
-            title_wrappers = wrapper.find_all('div', class_='ds-table__body')
-            titles = []
-            for title_wrapper in title_wrappers:
-                title = title_wrapper.find('h3', class_='p-whois__table-header').text.strip()
-                titles.append(title)
-                domain_info_unparsed = title_wrapper.find_all('p', class_='p-whois__text-cell')
+        try:
+            r = requests.get(f'https://www.reg.ru/whois/?dname={url}')
+            soup = BS(r.content, 'html.parser')
+            isreg = soup.find('p', class_='b-whois-domain-status__result')
+            wrapper = soup.find('div', class_='p-whois__table-wrapper')
+            ds_body = soup.find('div', class_='ds-table__body')
+            info = {}
+            if wrapper and isreg.text != 'свободен':
+                info[url] = {}
+                title_wrappers = wrapper.find_all('div', class_='ds-table__body')
+                titles = []
+                for title_wrapper in title_wrappers:
+                    title = title_wrapper.find('h3', class_='p-whois__table-header').text.strip()
+                    titles.append(title)
+                    domain_info_unparsed = title_wrapper.find_all('p', class_='p-whois__text-cell')
+                    info[url][title] = {title: domain_info_unparsed}
+                info[url] = format_info(info, url)
+                for title in titles:
+                    domain = '.'.join(url.split('.')[:-1])
+                    domain_1st = url.split('.')[-1]
+                    domains_1st_list = ['com', 'ru', 'pro', 'is']
+                    if domain_1st in domains_1st_list:
+                        domains_1st_list.remove(domain_1st)
+                    info[url]['sentence'] = f'Если вы хотите приобрести похожий домен, Вы можете попробовать ввести <i>{domain}.{domains_1st_list[0]}</i>, <i>{domain}.{domains_1st_list[1]}</i>, <i>{domain}.{domains_1st_list[2]}</i> и т.д.\nИли, нажав на кнопку ниже, просмотреть все возможные варианты.'
+                    add_to_cache(url, info[url][title]['domain_info'], info[url]['sentence'])
+                info_string = f"{info[url][titles[0]]['title']}\n{info[url][titles[0]]['domain_info']}\n\n{info[url][titles[1]]['title']}\n{info[url][titles[1]]['domain_info']}"
+
+                return f"<i>{url}</i> - <b>занят!</b>\n\n{info_string}\n\n{info[url]['sentence']}"
+
+            elif isreg.text != 'свободен' and len(ds_body.find_all('p', class_='p-whois__text-cell')) == 1:
+                info[url] = {}
+                title = ds_body.find('h3', class_='p-whois__table-header').text.strip()
+                domain_info_unparsed = ds_body.find_all('p', class_='p-whois__text-cell')
                 info[url][title] = {title: domain_info_unparsed}
-            info[url] = format_info(info, url)
-            for title in titles:
+                info[url] = format_info(info, url)
                 domain = '.'.join(url.split('.')[:-1])
                 domain_1st = url.split('.')[-1]
                 domains_1st_list = ['com', 'ru', 'pro', 'is']
@@ -99,55 +117,40 @@ async def get_info(url):
                     domains_1st_list.remove(domain_1st)
                 info[url]['sentence'] = f'Если вы хотите приобрести похожий домен, Вы можете попробовать ввести <i>{domain}.{domains_1st_list[0]}</i>, <i>{domain}.{domains_1st_list[1]}</i>, <i>{domain}.{domains_1st_list[2]}</i> и т.д.\nИли, нажав на кнопку ниже, просмотреть все возможные варианты.'
                 add_to_cache(url, info[url][title]['domain_info'], info[url]['sentence'])
-            info_string = f"{info[url][titles[0]]['title']}\n{info[url][titles[0]]['domain_info']}\n\n{info[url][titles[1]]['title']}\n{info[url][titles[1]]['domain_info']}"
+                info_string = f"{info[url][title]['title']}\n{info[url][title]['domain_info']}"
+                return f"<i>{url}</i> - <b>занят!</b>\n\n{info_string}\n\n{info[url]['sentence']}"
 
-            return f"<i>{url}</i> - <b>занят!</b>\n\n{info_string}\n\n{info[url]['sentence']}"
+            elif isreg.text != 'свободен':
+                wrapper = soup.find('div', class_='ds-table__body')
+                title = wrapper.find('h3', class_='p-whois__table-header').text.strip()
+                blocks = wrapper.find_all('div', class_='ds-table__row-body')
+                domain_info = ''
+                for block in blocks:
+                    name = f'<b>{block.find('p', class_='p-whois__title-cell').text.strip()}</b>'
+                    value = f'<i>{block.find('p', class_='p-whois__text-cell').text.strip()}</i>'
+                    domain_info += f'{name}: {value}\n'
+                info[url] = {'title': title, 'domain_info': domain_info.rstrip()}
+                domain = '.'.join(url.split('.')[:-1])
+                domain_1st = url.split('.')[-1]
+                domains_1st_list = ['com', 'ru', 'pro', 'is']
+                if domain_1st in domains_1st_list:
+                    domains_1st_list.remove(domain_1st)
+                info[url]['sentence'] = f'Если вы хотите приобрести похожий домен, Вы можете попробовать ввести <i>{domain}.{domains_1st_list[0]}</i>, <i>{domain}.{domains_1st_list[1]}</i>, <i>{domain}.{domains_1st_list[2]}</i> и т.д.\nИли, нажав на кнопку ниже, просмотреть все возможные варианты.'
+                add_to_cache(url, info[url]['domain_info'], info[url]['sentence'])
 
-        elif isreg.text != 'свободен' and len(ds_body.find_all('p', class_='p-whois__text-cell')) == 1:
-            info[url] = {}
-            title = ds_body.find('h3', class_='p-whois__table-header').text.strip()
-            domain_info_unparsed = ds_body.find_all('p', class_='p-whois__text-cell')
-            info[url][title] = {title: domain_info_unparsed}
-            info[url] = format_info(info, url)
-            domain = '.'.join(url.split('.')[:-1])
-            domain_1st = url.split('.')[-1]
-            domains_1st_list = ['com', 'ru', 'pro', 'is']
-            if domain_1st in domains_1st_list:
-                domains_1st_list.remove(domain_1st)
-            info[url]['sentence'] = f'Если вы хотите приобрести похожий домен, Вы можете попробовать ввести <i>{domain}.{domains_1st_list[0]}</i>, <i>{domain}.{domains_1st_list[1]}</i>, <i>{domain}.{domains_1st_list[2]}</i> и т.д.\nИли, нажав на кнопку ниже, просмотреть все возможные варианты.'
-            add_to_cache(url, info[url][title]['domain_info'], info[url]['sentence'])
-            info_string = f"{info[url][title]['title']}\n{info[url][title]['domain_info']}"
-            return f"<i>{url}</i> - <b>занят!</b>\n\n{info_string}\n\n{info[url]['sentence']}"
+                return f"<i>{url}</i> - <b>занят!</b>\n\n{info[url]['domain_info']}\n\n{info[url]['sentence']}"
 
-        elif isreg.text != 'свободен':
-            wrapper = soup.find('div', class_='ds-table__body')
-            title = wrapper.find('h3', class_='p-whois__table-header').text.strip()
-            blocks = wrapper.find_all('div', class_='ds-table__row-body')
-            domain_info = ''
-            for block in blocks:
-                name = f'<b>{block.find('p', class_='p-whois__title-cell').text.strip()}</b>'
-                value = f'<i>{block.find('p', class_='p-whois__text-cell').text.strip()}</i>'
-                domain_info += f'{name}: {value}\n'
-            info[url] = {'title': title, 'domain_info': domain_info.rstrip()}
-            domain = '.'.join(url.split('.')[:-1])
-            domain_1st = url.split('.')[-1]
-            domains_1st_list = ['com', 'ru', 'pro', 'is']
-            if domain_1st in domains_1st_list:
-                domains_1st_list.remove(domain_1st)
-            info[url]['sentence'] = f'Если вы хотите приобрести похожий домен, Вы можете попробовать ввести <i>{domain}.{domains_1st_list[0]}</i>, <i>{domain}.{domains_1st_list[1]}</i>, <i>{domain}.{domains_1st_list[2]}</i> и т.д.\nИли, нажав на кнопку ниже, просмотреть все возможные варианты.'
-            add_to_cache(url, info[url]['domain_info'], info[url]['sentence'])
+            else:
+                domain_1st = url.split('.')[-1]
+                domains_1st_list = ['com', 'ru', 'pro', 'is']
+                if domain_1st in domains_1st_list:
+                    domains_1st_list.remove(domain_1st)
 
-            return f"<i>{url}</i> - <b>занят!</b>\n\n{info[url]['domain_info']}\n\n{info[url]['sentence']}"
-
-        else:
-            domain_1st = url.split('.')[-1]
-            domains_1st_list = ['com', 'ru', 'pro', 'is']
-            if domain_1st in domains_1st_list:
-                domains_1st_list.remove(domain_1st)
-
-            sentence = 'Вы можете приобрести данный домен по кнопке ниже.'
-            add_to_cache(f'{url}', 'свободен', sentence)
-            return f'<i>{url}</i>  - <b>свободен!</b>\n\nВы можете приобрести данный домен по кнопке ниже.'
+                sentence = 'Вы можете приобрести данный домен по кнопке ниже.'
+                add_to_cache(f'{url}', 'свободен', sentence)
+                return f'<i>{url}</i>  - <b>свободен!</b>\n\nВы можете приобрести данный домен по кнопке ниже.'
+        except Exception:
+            return f'Произошла неизвестная ошибка... Попробуйте еще раз.'
 
 
 def add_to_cache(url, domain_info, sentence, screenshot='-'):
@@ -178,7 +181,7 @@ async def usr_message(msg: types.Message) -> None:
             else:
                 msg = await msg.reply('Ожидайте, идет поиск....')
                 info = await get_info(url)
-                if 'Ошибка' in info:
+                if 'ошибка' in info:
                     await msg.edit_text(f"{info}")
                 elif 'свободен' in info:
                     await msg.edit_text(f"{info}", reply_markup=create_button('Купить домен', f'https://www.reg.ru/buy/domains/?query={url}'))
